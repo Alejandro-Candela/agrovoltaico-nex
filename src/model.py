@@ -37,13 +37,14 @@ class SolarPredictor:
         
         return df
 
-    def train_and_save(self):
+    def train_and_save(self, lat: float, lon: float):
         """
-        Trains the XGBoost model on synthetic historical data and saves it.
+        Trains the XGBoost model on historical data for the specific location.
         """
-        logger.info("Starting model training...")
+        logger.info(f"Starting model training for {lat}, {lon}...")
         provider = WeatherProvider()
-        df = provider.get_historical_training_data()
+        # Fetch real historical data for this location
+        df = provider.get_historical_training_data(lat, lon)
         
         df = self._feature_engineering(df)
         
@@ -66,14 +67,20 @@ class SolarPredictor:
         logger.info(f"Model saved to {self.model_path}")
         self.model = model
 
-    def load_model(self):
-        """Loads the model from disk."""
-        if os.path.exists(self.model_path):
+    def load_model(self, lat: float = None, lon: float = None):
+        """
+        Loads the model from disk. If lat/lon provided, ensures model is trained for it.
+        For this demo, we'll retrain if lat/lon is provided to ensure accuracy.
+        """
+        if lat is not None and lon is not None:
+            # Always retrain for new location to ensure "location specific" accuracy
+            # In production, we would check if a model for this location exists
+            self.train_and_save(lat, lon)
+        elif os.path.exists(self.model_path):
             self.model = xgb.XGBRegressor()
             self.model.load_model(self.model_path)
         else:
-            logger.warning("Model file not found. Training new model...")
-            self.train_and_save()
+            logger.warning("Model file not found. Please provide lat/lon to train.")
 
     def predict(self, forecast_df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -103,7 +110,7 @@ class SolarPredictor:
         return result_df
 
 @st.cache_resource
-def get_predictor() -> SolarPredictor:
+def get_base_predictor() -> SolarPredictor:
     """
     Singleton provider for the SolarPredictor, cached by Streamlit.
     """
