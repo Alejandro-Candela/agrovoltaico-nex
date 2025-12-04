@@ -92,8 +92,8 @@ class WeatherProvider:
         # Synthetic features
         # 1. Solar Radiation: Based on hour of day and season (simplified)
         # Day of year for seasonality
-        doy = dates.dayofyear
-        hour = dates.hour
+        doy = dates.dayofyear.values
+        hour = dates.hour.values
         
         # Max radiation varies by season (higher in summer)
         seasonal_factor = 0.5 + 0.5 * np.sin((doy - 80) / 365.0 * 2 * np.pi)
