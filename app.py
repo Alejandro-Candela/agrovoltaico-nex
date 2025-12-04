@@ -13,6 +13,12 @@ from src.etl import WeatherProvider
 from src.model import get_base_predictor
 from src.indices import calculate_frost_risk, calculate_gdd
 
+from src.database import init_db, get_db, Site
+from sqlalchemy.orm import Session
+
+# Initialize DB
+init_db()
+
 # --- Page Config ---
 st.set_page_config(
     page_title="AgroVoltaico-Nex",
@@ -43,14 +49,30 @@ st.markdown("""
 # --- Sidebar ---
 st.sidebar.title("⚙️ Configuración")
 
-# Initialize session state for location
-if 'lat' not in st.session_state:
-    st.session_state.lat = 42.4667
-if 'lon' not in st.session_state:
-    st.session_state.lon = -2.4500
+# Database Session
+db = next(get_db())
+
+# Load Saved Sites
+sites = db.query(Site).all()
+site_names = [s.name for s in sites]
+site_names.insert(0, "Nueva Ubicación")
+
+selected_site_name = st.sidebar.selectbox("📍 Mis Sitios", site_names)
+
+if selected_site_name != "Nueva Ubicación":
+    site = db.query(Site).filter(Site.name == selected_site_name).first()
+    st.session_state.lat = site.latitude
+    st.session_state.lon = site.longitude
+    st.session_state.capacity = site.capacity_kwp
+else:
+    # Initialize session state for location if not set
+    if 'lat' not in st.session_state:
+        st.session_state.lat = 42.4667
+    if 'lon' not in st.session_state:
+        st.session_state.lon = -2.4500
 
 # 1. Address Search
-st.sidebar.subheader("📍 Ubicación")
+st.sidebar.subheader("📍 Nueva Búsqueda")
 address = st.sidebar.text_input("Buscar dirección:", placeholder="Ej. Logroño, La Rioja")
 
 if address:
@@ -74,7 +96,6 @@ with st.sidebar.expander("Coordenadas Manuales", expanded=False):
     with col_lon:
         new_lon = st.number_input("Lon", value=st.session_state.lon, format="%.4f", key="manual_lon")
     
-    # Update state if manual input changes (Streamlit handles this via key, but we need to sync)
     if new_lat != st.session_state.lat:
         st.session_state.lat = new_lat
     if new_lon != st.session_state.lon:
@@ -90,19 +111,32 @@ with st.sidebar:
         tooltip="Ubicación Actual"
     ).add_to(m)
 
-    # Capture map clicks
     st_data = st_folium(m, width=280, height=250, key="map_widget")
 
 if st_data and st_data['last_clicked']:
     clicked_lat = st_data['last_clicked']['lat']
     clicked_lng = st_data['last_clicked']['lng']
-    # Only update if different to avoid loops
     if abs(clicked_lat - st.session_state.lat) > 0.0001 or abs(clicked_lng - st.session_state.lon) > 0.0001:
         st.session_state.lat = clicked_lat
         st.session_state.lon = clicked_lng
         st.rerun()
 
 capacity_kwp = st.sidebar.number_input("Capacidad Solar (kWp)", value=100.0, step=10.0)
+
+# Save Site Button
+with st.sidebar.form("save_site_form"):
+    new_site_name = st.text_input("Nombre del Sitio")
+    submitted = st.form_submit_button("💾 Guardar Sitio")
+    if submitted and new_site_name:
+        existing = db.query(Site).filter(Site.name == new_site_name).first()
+        if existing:
+            st.error("Ya existe un sitio con este nombre.")
+        else:
+            new_site = Site(name=new_site_name, latitude=st.session_state.lat, longitude=st.session_state.lon, capacity_kwp=capacity_kwp)
+            db.add(new_site)
+            db.commit()
+            st.success("Sitio guardado!")
+            st.rerun()
 
 st.sidebar.markdown("---")
 st.sidebar.info("AgroVoltaico-Nex v1.2\n\nPowered by Open-Meteo & XGBoost")

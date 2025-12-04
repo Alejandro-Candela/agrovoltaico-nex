@@ -11,3 +11,6 @@ scikit-learn
 folium
 streamlit-folium
 geopy
+mlflow
+sqlalchemy
+pytest

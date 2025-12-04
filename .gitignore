@@ -23,6 +23,7 @@ share/python-wheels/
 MANIFEST
 src/*.pyc
 scripts
+tests
 
 # Virtual Environment
 venv/
